@@ -1,0 +1,706 @@
+---
+title: "Lab3_CentralLimitTheorem"
+author: "<YOUR NAME HERE>"
+date: "March 14, 2021"
+output:   
+  html_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goals of this lab
+
+* Use simulation to discover/cement your understanding of the Central Limit Theorem:
+* **Regardless of the distribution of individual data points, the average from a sufficiently large sample follows a predictable distribution:**
+$$\overline X \sim N(\mu, \frac{\sigma}{\sqrt{n}}).$$
+* Here $\overline X$ is the average of a sample from $n$ individual data points; $\mu$ and $\sigma$ are the expected value and standard deviation of the individual data point distribution
+  + Use re-sampling in R to explore for several distributions to see that the central limit theorem holds for sample averages
+* Go through several examples applying the central limit theorem to compute p-values.
+* See that the Central Limit theorem is not fully accurate for other summary statistics (e.g. percentiles, standard deviation)
+
+Before proceeding, please make sure you've watched the 5/17 lecture.
+
+# Explore for different starting distributions of the individual data
+
+For a particular distribution (and later for a set of data not following a simple distribution) you'll:
+
++ plot the distribution of the individual values.
++ take a sample of size 256, and compute the mean. Please observe that 256 is not particularly special-- I could have asked this for any sample size substantially over 30.
++ repeat taking a sample mean at least 10,000 times.  
++ plot a histogram of the distribution of sample means and overlay a plot of the normal distribution predicted by the CLT.
++ lastly, do a version where you vary the sample size (away from 256) and plot out how the accuracy of estimation of the population mean changes. 
+
+This is done for you as an example in the uniform distribution. You'll need to adapt the process for the other distribution and sample data -- but you can copy/paste this and adapt it as a starting point.
+
+## EXAMPLE Continuous uniform distribution - from 0 to 10
+
+0. First, a reminder of what the distribution of $X\sim Unif[0,10]$ looks like, let's plot both a histogram (empirical) and the theoretical distribution:
+```{r}
+sampleX = runif(10000,0,10) # a random sample
+hist(sampleX,breaks=20, freq =FALSE) # the histogram of the random sample gives an "empirical" distribution plot
+
+
+
+Omega = seq(0,10,0.05) # this is (approximately) the sample space for Unif[0,10]
+fOmega = dunif(Omega,0,10) # and this transform gives us the density function f(x) for each value x in the sample space Omega
+lines(Omega,fOmega, col="blue", lwd = 4) # a line plot with x values from Omeaga, and y values of fOmega: this plots the theoretical uniform density function as a thick blue line.
+```
+
+
+1. Let's establish what the CLT predicts.
+
+We'll need the values for $\mu$ and $\sigma$ (feel free to look up the formulae for your distributions, or compute by hand/with R. Below I refresh how to do this for a continuous distribution with integrals)
+
+We can compute these using integrals. Since $f(x)=1/10$ for all $x\in [0,10]$:
+
+$$E(X) = \int_0^{10} x\cdot \frac{1}{10} dx =5$$ and $$Var(X) =  \int_0^{10} (x- 5)^2 \cdot \frac{1}{10} dx = \frac{25}{3}$$
+
+So $\mu = 5$ and $\sigma = \sqrt{\frac{25}{3}} \approx 2.8868$
+
+> Sample means from samples of size 256 will follow a normal distribution, most falling close to the "true" mean of $\underline{\mu = 5}$. Since the standard deviation of the individual units is approximately $\underline{2.8868}$ (from the theoretical computation), the *standard error* of using a sample mean to approximate estimate the true mean will be $SE\sim\frac{2.8868}{\sqrt{256}} \approx \underline{0.1804}$.
+
+In short, we expect $\overline{X} \sim N(5, 0.1804)$    
+Because of properties of the normal distribution this means that, if I take a sample of 256 values, the sample average has a:
+* $\sim$68\%$ chance of being within 0.1804 of the true mean.
+* $\sim95\%$ chance of being with 0.354 of the true mean.
+* $\sim99.7\%$ chance of being within 0.5412 of the true mean.
+
+I'm going to save the key variables so we can refer to them later:
+```{r}
+mu = 5
+SE = 0.1804
+```
+
+2. Create an $n=256$ sample from the Uniform[0,10] distribution. Plot the distribution of the individual values in a histogram, and compute the sample mean for this one sample of 256.
+```{r}
+X = runif(256, min = 0, max=10)
+hist(X, freq=FALSE, breaks=seq(-0.5,10.5,0.5))
+Xbar = mean(X)
+Xbar
+```
+
+3. Now apply the `replicate` method to build a vector which takes 10,000 different samples of size $256$ each, and computes the sample mean for each one. [Note: you can use `?replicate` to better understand this method. It avoids (less efficient) for loops.]
+
+```{r}
+ManyXbar = replicate( 10000,mean( runif(256, 0, 10) ) )
+```
+
+4. Now plot a histogram of the 10,000 resampled sample means you produced in step 2.
+NOTE: it might take some guess and check to pick a good range for the `breaks` argument (a good start is to use `seq(low,high,0.01)` for low and high close to $\mu\pm 5* SE$).
+```{r}
+hist(ManyXbar, freq = FALSE, breaks = seq(4,6,0.01) )
+```
+
+5. Yay! The sample means from 10,000 different samples look like they do indeed follow a normal distribution. To double check, let's overlay the theoretical normal distribution predicted from the central limit theorem.
+
+Remember that CLT predicts $\overline{X} \sim N(\mu, SE)$ where we computed `mu` and `SE` in part 1.
+
+```{r}
+hist(ManyXbar, freq = FALSE, breaks = seq(4,6,0.01), col="grey" ) # plot the histogram again
+
+possibleXbar = seq(4,6,0.01) # This is a vector of possible values of the sample mean (within a couple standard errors of mu)
+
+densitiesFromCLT = dnorm(possibleXbar, mu , SE) #The probability density associated with each of the possible Xbars. Here mu = 5, SE = 0.1804
+
+lines(x = possibleXbar, y=densitiesFromCLT, col="blue", lwd = 3) #plot the possible Xbar vs. its density as a thick blue curve.
+```
+
+6. This concludes our "check" that sample means drawn from the Uniform[0,10] distribution do indeed follow the expected distribution predicted by the Central Limit Theorem. 
+
+From this, if I get a sample mean of I can compute it's "extremeness" For example if I got $\overline{X}=4.345$ I can compute it's "extremeness" by finding the p-value: `2*pnorm(4.345, 5, 0.1804)= 0.0002825`, making it one of the 0.028% most extreme sample means I would find!
+
+
+
+## Your turn! 
+
+In this section you will choose a different base distribution (not uniform) and validate that the prediction of the CLT matches the sample mean histogram.
+
+<span style="color:purple;">
+$\star$ **Task** repeat the steps 0-6 above for one of the following distributions:
+
++ Poisson, with 20 average # arrivals per time unit 
++ Binomial on 30 attempts with probability of success of 0.2
++ Exponential, with rate 1/4
+</span>
+
+NOTE: your solution should have *every* element of the demo above, but corrected for the distribution you've chosen. This includes the final example computation (but you should choose another reasonable-ish sample mean value for your distribution and compute the corresponding p-value).
+
+You may ask: Will I get extra credit if I do more than 1? Answer: +5 points per extra... and only if the first one is PERFECT.
+
+<span style="color:blue;">
+Poisson, with 20 average # arrivals per time unit 
+</span>
+
+
+```{r}
+#step 0
+sampleArrivals = rpois(10000, 20)
+hist(sampleArrivals,breaks=20, freq =FALSE)
+po_omega = seq(0,40,1)
+po_fomega = dpois(po_omega, 20)
+lines(po_omega, po_fomega,col = "blue", lwd = 4)
+
+```
+
+```{r}
+#step 1
+po_mu = 20
+po_var = 20
+po_SE = sqrt(20)/sqrt(256)
+po_mu
+po_SE
+
+
+```
+
+```{r}
+#step 2
+po_x = rpois(256, 20)
+hist(po_x, freq = FALSE, breaks = seq(min(po_x)-2, max(po_x)+2, 1))
+po_xbar = mean(po_x)
+po_xbar
+
+
+```
+
+```{r}
+#step 3
+Many_poXbar = replicate( 10000,mean( rpois(256, 20) ) )
+
+```
+
+```{r}
+#step 4
+hist(Many_poXbar, freq = FALSE, breaks = seq(18,22,0.01))
+
+```
+
+
+```{r}
+#step 5
+hist(Many_poXbar, freq = FALSE, breaks = seq(18,22,0.02), col="grey" ) # plot the histogram again
+
+possible_poXbar = seq(18,22,0.02) # This is a vector of possible values of the sample mean (within a couple standard errors of mu)
+
+po_densitiesFromCLT = dnorm(possible_poXbar, po_mu , po_SE) #The probability density associated with each of the possible Xbars. Here mu = 5, SE = 0.1804
+
+lines(x = possible_poXbar, y=po_densitiesFromCLT, col="blue", lwd = 3) #plot the possible Xbar vs. its density as a thick blue curve.
+
+```
+```{r}
+#step 6
+#let pick 19.2 to check sample means drawn from the poission(20) distribution do indeed follow the expected distribution predicted by the Central Limit Theorem
+po_pvalue = 2*pnorm(19.2, 20, po_SE)
+po_pvalue
+#since 0.004207551 is a very small value, we can tell that the central limit theorem get proved
+```
+<span style="color:blue;">
+Binomial on 30 attempts with probability of success of 0.2
+</span>
+
+```{r}
+#step 0
+sampleBinomial = rbinom(10000, 30, 0.2)
+hist(sampleBinomial,breaks=20, freq =FALSE)
+bi_omega = seq(0,30,1)
+bi_fomega = dbinom(bi_omega, 30, 0.2)
+lines(bi_omega, bi_fomega,col = "blue", lwd = 4)
+```
+
+
+```{r}
+#step 1
+# Expected Value
+bi_mu = 30*0.2
+bi_mu
+#Standard Error
+bi_var = 30*0.2*(1-0.2)
+bi_SE = sqrt(bi_var)/sqrt(256)
+bi_SE
+
+```
+```{r}
+#step 2
+bi_x = rbinom(256, 30, 0.2)
+hist(bi_x, freq = FALSE, breaks = seq(min(bi_x)-1, max(bi_x)+1, 1))
+bi_xbar = mean(bi_x)
+bi_xbar
+
+```
+
+
+```{r}
+#step 3
+Many_biXbar = replicate( 10000,mean( rbinom(256, 30, 0.2) ) )
+
+
+```
+
+```{r}
+#step 4
+hist(Many_biXbar, freq = FALSE, breaks = seq(5,7,0.01))
+```
+
+
+```{r}
+#step 5
+hist(Many_biXbar, freq = FALSE, breaks = seq(4,8,0.03), col="grey" ) # plot the histogram again
+
+possible_biXbar = seq(4,8,0.03) # This is a vector of possible values of the sample mean (within a couple standard errors of mu)
+
+bi_densitiesFromCLT = dnorm(possible_biXbar, bi_mu , bi_SE) #The probability density associated with each of the possible Xbars. Here mu = 5, SE = 0.1804
+
+lines(x = possible_biXbar, y=bi_densitiesFromCLT, col="blue", lwd = 3) #plot the possible Xbar vs. its density as a thick blue curve.
+
+
+```
+
+```{r}
+#step 6
+#let pick 5.5 to check sample means drawn from the binomial(30,0.2) distribution do indeed follow the expected distribution predicted by the Central Limit Theorem
+bi_pvalue = 2*pnorm(5.5, 6, bi_SE)
+bi_pvalue
+#since 0.0002607296 is a very small value, we can tell that the central limit theorem get proved
+```
+
+<span style="color:blue;">
+Exponential, with rate 1/4
+</span>
+
+
+```{r}
+#step 0
+lamda = 1/4
+sampleExp = rexp(10000, lamda)
+hist(sampleExp,breaks=20, freq =FALSE)
+ex_omega = seq(0,30,1)
+ex_fomega = dexp(ex_omega,lamda)
+lines(ex_omega, ex_fomega,col = "blue", lwd = 4)
+
+```
+```{r}
+#Step 1
+ex_mu = 1/lamda
+ex_mu
+ex_var = (ex_mu)^2
+ex_se = sqrt(ex_var)/sqrt(256)
+ex_se
+
+```
+
+```{r}
+#step 2
+ex_x = rexp(256, 1/4)
+hist(ex_x, freq = FALSE, breaks = seq(min(ex_x)-1, max(ex_x)+1, 0.5))
+ex_xbar = mean(ex_x)
+ex_xbar
+
+
+```
+
+```{r}
+#step 4
+Many_expXbar = replicate( 10000,mean( rexp(256, 1/4) ) )
+
+```
+
+
+```{r}
+#step 5
+hist(Many_expXbar, freq = FALSE, breaks = seq(2,6,0.01), col="grey" ) # plot the histogram again
+
+possible_expXbar = seq(2,6,0.01) # This is a vector of possible values of the sample mean (within a couple standard errors of mu)
+
+ex_densitiesFromCLT = dnorm(possible_expXbar, ex_mu , ex_se) #The probability density associated with each of the possible Xbars. Here mu = 5, SE = 0.1804
+
+lines(x = possible_expXbar, y=ex_densitiesFromCLT, col="blue", lwd = 3) #plot the possible Xbar vs. its density as a thick blue curve.
+```
+```{r}
+#step 6
+#let pick 5.5 to check sample means drawn from the binomial(30,0.2) distribution do indeed follow the expected distribution predicted by the Central Limit Theorem
+ex_pvalue = 2*pnorm(3.2, 4, ex_se)
+ex_pvalue
+#since 0.001374276 is a very small value, we can tell that the central limit theorem get proved
+
+```
+
+
+
+# Accuracy of sample mean estimates for sample size $n$
+
+For this problem you'll work with a simulated population 2000 student's exam scores from a 100 question multiple choice (a,b,c,d) test. I generate this population below (in part to show additional uses of distributions and how they can be blended together). But for the problem, you can just directly refer to the dataset `Population`.
+
+```{r}
+set.seed(592)
+#200 students were absent from the exam.
+Absent = rep(0,200)  
+
+#400 students just guessed, so have a a 1/4 chance of success on each question
+Guessed = rbinom(400,100,1/4) 
+
+#1400 students studied -- they have an average score of 80 with standard deviation of 20.  The pmax ensures the score is never over 100, pmin ensures it's never below 0, and round makes this an integer score.
+Studied = round(pmax(pmin(rnorm(1400,80,20),100),0)) 
+
+#Combine the different groups of students into one population
+Population = c(Absent,Guessed,Studied)
+
+# view the distribution: note you can see 3 "modes" from the 3 combined distributions
+hist(Population,breaks=seq(-5.5,105.5,5))
+```
+
+Note that since this is the full population we can compute $\mu$ and $\sigma$ as:
+```{r}
+mu = mean(Population)
+sigma = sd(Population)
+
+sprintf("mean: %f , sd: %f",mu,sigma)
+```
+
+In this task you'll see how the Central limit theorem formalizes the following intuition:
+
+> It makes sense that a bigger sample gives a more representative group, and so the average of a larger sample is generally a better estimate of the true average.
+
+
+**To do this:** you'll take samples of various (small, medium, and large) sizes. Then you'll the sample size vs. the sample mean and inspect how quickly the sample means "converge" onto the true population mean as the sample size grows.   
+
+The CLT gives a theoretical convergence rate: sample means from samples of size $n$ tend to be within $\frac{\sigma}{\sqrt{n}}$ of the true population mean. So as $n$ gets larger, we can predict how much closer the sample mean is expected to be.
+
+Let's dig in to this to make sure "real" cases align with the theory.    
+This time we'll take many samples, but we'll vary our sample size.
+
+We will consider samples of size 10,20,30,...,1000. And because samples of each size can vary, I'm going to take 10 different samples at each size.
+
+The below code generates the sequence of sample sizes I want. Check out `?rep` if you are interested in seeing how.
+```{r}
+sample_sizes = rep(seq(10, 1000, 10) , each=10)
+sample_sizes[1:50] # what do the first sample sizes look like?
+```
+
+<span style="color:purple;">
+$\star$ **Task** Take a sample (and compute the sample mean) for each sample size! You can use the following code as a starting point if you choose.
+</span>
+
+```{r}
+#example
+demo_sample_sizes = c(30,30,30,100,100)
+demo_sample_means = c()
+for(n in demo_sample_sizes){
+  resample = sample(Population, n)
+  demo_sample_means = c(demo_sample_means, mean(resample))
+}
+
+#solution to this task
+sample_means = c()
+for (n in sample_sizes) {
+  resample1 = sample(Population, n)
+  sample_means = c(sample_means, mean(resample1))
+}
+
+
+```
+
+
+
+<span style="color:purple;">
+$\star$ **Task** Adapt the code below, replacing the comment with a `plot` method call to give a scatterplot of the `sample_sizes` as the x-axis verses the sample means. Then answer the following: What happens as the sample size increases? And what does the shape compared to the shape of the orange curves tell you?
+</span>
+
+The remainder of the code block adds lines at $\mu$, $\mu \pm \frac{\sigma}{\sqrt{n}}$ and $\mu \pm 3\cdot \frac{\sigma}{\sqrt{n}}$ to see whether the CLT accurately predicts the convergence.
+
+```{r, eval=TRUE}
+# IMPORTANT: replace this comment with your code to plot the scatterplot of sample sizes vs sample mean. Running this code without it will throw an error!!!
+# ALSO IMPORTANT: Change this to eval=TRUE or the code output will not be included in your knit HTML and I won't be able to grade your work!!!
+
+n = seq(0,1000,10)
+plot(sample_sizes, sample_means)
+lines(x = n,y = rep( mean(Population), length(n) ),col="blue", lwd=2)             # adds the population mean in blue
+lines(x = n, y = mean(Population)+ sd(Population)/sqrt(n), col="orange", lwd=2)   # adds 1 SE range in orange
+lines(x = n, y = mean(Population) - sd(Population)/sqrt(n), col="orange", lwd=2)  # adds 1 SE range in orange
+lines(x = n, y = mean(Population)+ 3*sd(Population)/sqrt(n), col="red", lwd=2)    # adds 3 SE range in red
+lines(x = n, y = mean(Population)- 3*sd(Population)/sqrt(n), col="red", lwd=2)    # adds 3 SE range in red
+
+```
+
+Your plot should clearly show that, as sample size grows, the sample means *converge* to the true population mean-- and that they do so at a rate proportional to $\frac{\sigma}{\sqrt{n}}$.
+
+<span style="color:blue;">
+Answer to question: What happens as the sample size increases? And what does the shape compared to the shape of the orange curves tell you?
+As the sample size increases, the x values are more and more closed to the mean value of population. All the x values = mean/mu +/- 2*(standard error)
+
+</span>
+
+
+
+# So... how do I apply the Central Limit Theorem?
+Remember when we computed the chance of getting an outcome under a particular distribution? For example: If a company claims that only 0.2% of their products are faulty, and you sample 100 products and find 4 faulty products, we can compute the  p-value for this outcome as $P(X \ge 4 | X\sim Binomial(100,0.002)) \approx 0.0000538$. Since this outcome is so very rare under the company's claim, you can treat it as evidence their claim is incorrect (or you got really really unlucky in your sample).
+
+Previously, these "p-values" required us to have a very clear idea about the distribution we were testing against (e.g. binomial in the example above)-- which is rare with real data. But with the Central Limit Theorem, we know **all** sample averages (and proportions) from sufficiently large samples (rule of thumb n > 30) can be tested against $N(\mu,\frac{\sigma}{\sqrt{n}})$. We still need to know what the claimed $\mu$ (and ideally the claimed $\sigma$) is though!
+
+
+## Example 1: (Basic example where the claimed population mean and standard deviation are known).
+
+An internet provider finds that (nationwide) the average data user per household is 268 GB per month, with a standard deviation of 42 GB across households. You want to know if your county is representative of the national usage. You take a random sample of 100 households in your county and find the average data used per household in this sample was 275 GB per month. Is this a significant enough difference to indicate that usage in your county is different than usage nationwide?
+
+**Solution 1:** Since this question asks us to test a *sample mean* from a *sufficiently large sample* against a *given/claimed population mean*, we can apply the CLT and test against the normal distribution. And in particular, the population $\mu=268GB$ and we'll use standard error of $\frac{42}{\sqrt{100}}=4.2$
+
+To check whether my county sample mean (that differed by 7GB) indicates my county is consistent/inconsistent with the nationwide distribution I want to find $pvalue = P\bigg( \overline{X}_{100} \text{ is at least 7GB different from the population mean}  \mid \overline{X}_{100} \sim N(268, \frac{42}{\sqrt{100}})\bigg)$. This is represented in the plot below
+This is `2*pnorm(261,268,4.2) = 0.0955807)`.    
+Why am I multiplying by 2? because `pnorm(261,268,4.2)` just gives the probability that the sample mean is at least 7 *below* the claim (261 or less).  The 7 *above* is symmetric and so the same probability. Multiplying by 2 is a shortcut, though you could instead use `pnorm(261, 268, 4.2)+ pnorm(275, 268, 4.2, lower.tail=FALSE)` and get the same thing directly.
+
+What does this 0.0955807 mean? This means the sample I took matches up with random samples nationwide -- nearly 10% of purely random samples of 100 houses produce sample means as extreme as the one in my county, so I don't have enough evidence to claim my county has different usage!
+
+
+```{r, echo=FALSE}
+library(ggplot2)
+y2 <- seq(248,261,0.25)
+densities2 = dnorm(y2,268,4.2)
+y2<- seq(248,288,0.25)
+densities = dnorm(y2,268,4.2)
+densities2 = c(densities2, rep(0,14*4-1), dnorm(seq(275,288,0.25),268,4.2))
+
+
+data2<-data.frame(x=y2,y=densities2, ynorm = densities, Shaded = rep("P(Xbar is at least 7GB from mu)", length(y2)))
+
+
+ggplot(data2, aes(x=x, y=y, fill = Shaded)) +
+  xlab("Xbar (from 100 samples)")+
+  ylab("Density predicted from CLT")+
+  labs(title="pvalue for Xbar test using CLT")+
+  geom_area()+
+  geom_line(inherit.aes = FALSE, mapping = aes(x=x, y=densities))+
+  geom_vline(aes(xintercept = 261,colour = ' 7GB from mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept = 275,colour = ' 7GB from mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept=268, color = 'mu = 268GB'), size = 1)
+
+  
+```
+
+<span style="color:purple;">
+$\star$ **Task** Find the p-value if I'd instead found the mean of my sample as 260GB instead of 275GB. 
+</span>
+```{r, echo=FALSE}
+library(ggplot2)
+y3 <- seq(248,260,0.25)
+densities3 = dnorm(y3,268,4.2)
+y3<- seq(248,288,0.25)
+densities1 = dnorm(y3,268,4.2)
+densities3 = c(densities3, rep(0,16*4-1), dnorm(seq(276,288,0.25),268,4.2))
+
+
+data3<-data.frame(x=y3,y=densities3, ynorm = densities1, Shaded = rep("P(Xbar is at least 8GB from mu)", length(y3)))
+
+
+ggplot(data3, aes(x=x, y=y, fill = Shaded)) +
+  xlab("Xbar (from 100 samples)")+
+  ylab("Density predicted from CLT")+
+  labs(title="pvalue for Xbar test using CLT")+
+  geom_area()+
+  geom_line(inherit.aes = FALSE, mapping = aes(x=x, y=densities1))+
+  geom_vline(aes(xintercept = 260,colour = ' 8GB from mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept = 276,colour = ' 8GB from mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept=268, color = 'mu = 268GB'), size = 1)
+
+p_value = 2*pnorm(260, 268, 4.2)
+p_value
+  
+```
+
+
+
+## Example 2: (True population $\sigma$ unknown). 
+
+Frequently we have a claimed $\mu$ to test against, but we *don't* have a well-known $\sigma$. When this happens, we can use the sample's standard deviation as an estimation. 
+
+Your boss set a goal to reduce average page-load latency of the product to under 100ms. Your coworker Andy made code more efficient and think they've met the bosses' goal. Andy asks you (because they know you are stats-savvy) to help them prove it. 
+
+To reduce costs, your team only records a tiny fraction of latencies in a random sample. You look at the 68,000 latencies recorded since the coworker's fix went out. In this sample, the average is 104.6ms, with a standard deviation of 94ms.
+
+Andy says "Oh! 104.6ms and the standard deviation is 94ms! That means that we are well within one standard deviation of 100ms and so are statistically indistinguishable from 100ms!! Win!!!"   
+Is he right? Back up your answer with a p-value to show the chance of getting a sample with this high of a latency if the population mean is actually 100ms.
+
+
+**Solution 2:** In short, no. Andy's error is forgetting that 94ms indicates how far away individual (n=1) latency samples tend to be from the population mean. *Sample means* are generally within a couple **standard errors** $\frac{\sigma}{\sqrt{n}}$ of the population mean instead.
+
+Here the standard error is estimated at $\frac{94}{\sqrt{68000}} \approx 0.3605$ -- so 104.6ms is over 12 standard errors from 100ms!! It's not looking good for Andy!
+
+To compute a p-value here, we can compute $P(\overline{X}_{68000} \ge 104.6 \mid \overline{X}_{68000} \sim N(100, 0.3605)) = $`1-pnorm(104.6,100,0.3605)` which is within R's rounding error of 0!. This is visualized below (essentially no shaded area):
+
+
+```{r, echo=FALSE}
+y2 <- seq(104.6,105,0.05)
+densities2 = dnorm(y2,100,0.3605)
+y2<- seq(95,105,0.05)
+densities = dnorm(y2,100, 0.3605)
+densities2 = c(rep(0,length(y2) - length(densities2)), densities2)
+
+
+data2<-data.frame(x=y2,y=densities2, ynorm = densities, Shaded = rep("P(Xbar is at least 4.6 over mu)", length(y2)))
+
+
+ggplot(data2, aes(x=x, y=y, fill = Shaded)) +
+  xlab("Xbar (from 6800 samples)")+
+  ylab("Density predicted from CLT")+
+  labs(title="pvalue for Xbar test using CLT")+
+  geom_area()+
+  geom_line(inherit.aes = FALSE, mapping = aes(x=x, y=densities))+
+  geom_vline(aes(xintercept = 104.6,colour = ' 4.6ms above mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept=100, color = 'mu = 100ms'), size = 1)
+```
+
+
+So it's essentially impossible to get this sample if Andy achieved the goal of 100ms average latency.
+
+
+<span style="color:purple;">
+$\star$ **Task** Find the p-value if Andy's sample mean is still 104.6ms, but the estimated standard deviation in the sample was 27.6ms instead of 94ms.
+</span>
+```{r, echo=FALSE}
+p_se = 27.6/sqrt(68000)
+y4 <- seq(104.6,105,0.05)
+densities4 = dnorm(y4,100,p_se)
+y4<- seq(95,105,0.05)
+densities2 = dnorm(y4,100, p_se)
+densities4 = c(rep(0,length(y4) - length(densities4)), densities4)
+
+
+data4<-data.frame(x=y4,y=densities4, ynorm = densities2, Shaded = rep("P(Xbar is at least 4.6 over mu)", length(y4)))
+
+
+ggplot(data4, aes(x=x, y=y, fill = Shaded)) +
+  xlab("Xbar (from 6800 samples)")+
+  ylab("Density predicted from CLT")+
+  labs(title="pvalue for Xbar test using CLT")+
+  geom_area()+
+  geom_line(inherit.aes = FALSE, mapping = aes(x=x, y=densities2))+
+  geom_vline(aes(xintercept = 104.6,colour = ' 4.6ms above mu'), linetype ="dashed", size=1, show.legend=FALSE)+
+  geom_vline(aes(xintercept=100, color = 'mu = 100ms'), size = 1)
+p_value2 = 1-pnorm(104.6,100,p_se)
+p_value2
+
+```
+  
+
+
+##Example 3: (CLT applied for proportions). 
+
+Central Limit theorem also applies to proportions in addition to sample means. This is because proportions are just averages of binary $X$.
+Note: it is generally more accurate (especially for smaller samples) to use the binomial distribution when you can!  
+
+A scratch-off-lottery ticket claims that at least 10% of the tickets win \$5 or more.  You find records for a random sample of 10,000 tickets and find 978 win \$5 or more. Is this result reasonably consistent with their claim?
+
+
+**Solution 3** This can be solved easily with the binomial distribution:
+Binomial approach: p-value is $P\bigg(X \le 978 \mid X \sim binom(10000, 0.1)\bigg) = $`pbinom(978,10000,0.1)`$ \approx  0.2375$
+
+Or you can instead use the normal approximation from CLT. Here $\sigma = \sqrt{p(1-p)} = \sqrt{0.1\cdot 0.9}$, which we steal from the binomial variance formula.  
+Normal approach: p-value is $P\bigg(\overline{X}_{10000} \le 0.0978 \mid \overline{X}_{10000} \sim N(0.1, \frac{\sqrt{0.1\cdot 0.9}{10000}})\bigg)=$`pnorm(0.0978,0.1,0.003)`$\approx 0.2317$ 
+
+The binomial approach is more accurate (doesn't rely on "asymptotics") but both indicate that the sample is fairly consistent with the lottery company's claim. 
+
+<span style="color:purple;">
+$\star$ **Task** Find the p-value from both the binomial exact solution and the CLT approximation if instead you found a random sample of 100,000 tickets contained 9780 which win \$5 or more.    
+After, explain why the p-value changed even though the sample proportion of 0.978 is the same as in the original version of the problem.
+
+</span>
+
+<span style="color:blue;">
+
+Answer: because the standard deviation value have changed in normal distribution(From sqrt(0.09)/sqrt(100000) change to sqrt(0.09)/sqrt(1000000)) 
+
+</span>
+
+```{r}
+#Binomial approach
+bi_pv = pbinom(9780, 100000, 0.1)
+bi_pv
+
+#CLT approach
+variance = sqrt(0.1*0.9)
+CLT_pv = pnorm(0.0978, 0.1, variance / sqrt(100000))
+CLT_pv
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Caveats
+
+First: sample size matters! For very small samples the normal distribution prediction IS NOT ACCURATE (a rule of thumb is <30, though if the baseline distribution is REALLY skewed, you might need bigger samples).
+
+
+ALSO: in example 2, I used the sample's standard deviation in place of $\sigma$. For smaller samples (e.g. $n<1000$) this adds extra error. In these cases, it is better to use the [Student's t-distribution](https://en.wikipedia.org/wiki/Student%27s_t-distribution) which is a normal-ish distribution that converges to the normal as the sample size increases. **Luckily** in computer science, you generally work with large enough data sets that the normal distribution suffices!
+We've only talked about CLT applied to the sample mean, not to other summary stats like median, 95th percentiles, or standard deviation. That's because the Central Limit Theorem really ONLY applies to sample means (and proportions) estimating population means and proportions. Other statistics besides sample mean are less well-behaved.
+
+
+
+**************
+
+As an extreme example, consider trying to estimate the 10th percentile score in `Population` by taking a sample of 256. The sample 10th percentile might be *way* off the population 10th percentile -- and it's hard to know by how much if you can't resample. A quick histogram of resampled 10th percentiles from different samples each of size 256 shows that the 10th percentiles don't seem to form a normal distribution at all: so certainly the central limit theorem isn't applicable to percentile statistics (and many others).
+```{r}
+resample10th = replicate(10000, quantile(sample(Population, 256),0.1))
+hist(resample10th, freq=FALSE )
+
+```
+
+So in short: the Central Limit Theorem is a powerful tool for statistics. But it isn't a "one-size fits all" solution. Apply it for mean/proportion statistics -- but on any other statistics it isn't guaranteed and is likely to mislead you.
+
+
+<span style="color:purple;">
+$\star$ **Task** Choose 5 other percentiles (e.g. the 50th percentile, the 95th percentile, the 40th percentile, etc...) and create histograms by adapting the code above. For each, state whether it appears the sample mean follows roughly a normal distribution.
+</span>
+
+```{r}
+#the 25th percentile
+resample25th = replicate(10000, quantile(sample(Population, 256),0.25))
+hist(resample25th, freq=FALSE )
+#The sample mean does not follow roughly a normal distribution
+```
+
+```{r}
+#the 40th percentile
+resample40th = replicate(10000, quantile(sample(Population, 256),0.40))
+hist(resample40th, freq=FALSE )
+#The sample mean does not follow roughly a normal distribution
+```
+
+
+```{r}
+#the 50th percentile
+resample50th = replicate(10000, quantile(sample(Population, 256),0.5))
+hist(resample50th, freq=FALSE )
+#The sample mean follows roughly a normal distribution
+```
+
+```{r}
+#the 75th percentile
+resample75th = replicate(10000, quantile(sample(Population, 256),0.75))
+hist(resample75th, freq=FALSE )
+#The sample mean follows roughly a normal distribution
+```
+
+
+```{r}
+#the 90th percentile
+resample90th = replicate(10000, quantile(sample(Population, 256),0.90))
+hist(resample90th, freq=FALSE )
+#The sample mean follows roughly a normal distribution
+```
+
+
+
+
+```

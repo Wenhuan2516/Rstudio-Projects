@@ -1,0 +1,372 @@
+---
+title: "R for data analysis (exploration of a data set)"
+author: "Wenhuan Tan"
+output:   
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+A note: I write labs (and many other things for the class) in RMarkdown. Markdown in general is a widely used mark-up language that allows enriched text and can be compiled into html, pdf, and more. RMarkdown has the additional benefit of working as a code notebook where you can insert and run R code. See [this student's writeup about RMarkdown](https://www.stat.cmu.edu/~cshalizi/rmarkdown/) for guidance on RMarkdown if you want to learn more.
+
+# Goals of this lab
+
+* Get comfortable using R to explore a realistic data set.
+* Learn basic plotting methods in R, which will be useful throughout the class (and beyond) for visualizing and understanding data quickly.
+    + Histograms (the most useful plot for numeric distributions)
+    + Boxplots (a more succinct plot of numeric distribution)
+    + Tables (ok, not a plotting method... but a succinct view for categorical data)
+    + Scatterplots (look for relationships between numeric data)
+    + Time series (look for a time-related change in numeric data)
+* Subset and summarize the data set.
+* Review "summary statistics" in practice, where you can get context for the information conveyed by each (for standard deiation and correlation we'll learn the underlying computation soon -- for now focus on the meaning)
+    + Mean `mean(X)` as a measure of center
+    + Median and other percentiles `quantile(X)` as indicators of common vs. extremal behavior
+    + Proportion meeting some criteria `sum(<X fits criteria?>)/length(X)` as a measure of frequency
+    + Standard deviation `sd(X)` as a measure of how consistent or spread out the data is
+
+*******
+# Prerequisites
+
+##Importing the data set into RStudio
+
+1. Download the csv (comma-seperated-value) data file for our (fake) Music App. CSV is a standard text file format for working with data on your local machine.
+
+2. In RStudio, locate the "ImportDataset" option in the "Environment" pane. Use this to select the file type. For this class, we'll be using standard csv (comma-seperated-value) files, so use the "text(base)" option.
+
+
+3. This should open a file explorer. Navigate to and select the csv file you downloaded. A preview window opens. You can rename the table so that it's easy to reference in code -- I'll give notes throughout as if you'd renamed it `data`. Preview the import to make sure it's being properly translated and then import. Note that the command for this import will appear in the console: if you prefer to use the command in future, go ahead! 
+
+
+## Accessing parts of the table.
+
+* to view table: `View(data)`
+* to print the first few rows of the table: `head(data)`
+* to check the number of rows: `nrow(data)` (resp. `ncol(data)` for column count)
+* [! Important] to refer to a particular column that's by name -- replace `X` with the name of the column: `data$X`
+* to refer to a row by index -- replace `i` with the row index: `data[i,]`
+  + also works for columns by index:`data[,j]` for column `j`
+  + also works on a vector of indices, like `data[1:10, ]` for the first 10 rows or `data[ , c(2,4,5)]` for columns 2, 4, 5.
+* [! Important] to subset the table by a condition: `subset(data, condition)` (use `?subset` in the console for full details)
+  + e.g. `subset(data, X > 10)` where X is a column name, keeps only rows where the `X` column is over 10
+  + you can have compound conditions by using `&&` (and), `||` (or). Also may be helpful to know that in R `!` indicates not, so `X!=0` will take only the data where X isn't 0.
+  
+  
+<span style="color:purple;">
+$\star$ **Task** Play around with each of the above methods in the console (no need to show this in your lab file). Then, in the space for R code below, create a variable `sessionsWithErrorsOrLatency` equal to the subset of the data including only rows where there are at least 3 errors **or** the latency exceeds 600. Use methods from above to print the "head" of this subset, and to compute the number of rows in this subset.
+</span>  
+
+
+
+Insert your code here (follow this same pattern for each task):
+```{r}
+songAppData <- read.csv("C:/Users/seven/Desktop/Bellevue College/Math270/Lab1/songAppData.csv")
+sessionsWithErrorsOrLatency = subset(songAppData, songAppData$nErrors>= 3 || songAppData$avgLatencies > 600)
+head(sessionsWithErrorsOrLatency)
+```
+And if you have any comments/notes, write them in text here:
+
+
+*******
+# Visualize data
+
+As a data analyst (or anyone working on a set of data), this is usually the first step when you get a new data set. There's no faster way to start understanding patterns in data than to plot it in a few different ways.
+
+## Histograms: understanding the distribution
+The "distribution" of data refers to how frequently the data takes on different values. We'll also talk about probability distributions, which are an exact/formal version of this. For quickly understanding the distribution of real data, nothing beats a histogram (or the equivalent "bar chart" for categorical data). Histograms group nearby values into *bins*, and count the number of values that are in each bin. The result is displayed as a bar chart, where taller bars indicate more data in that range.
+
+Histograms can be used for any numeric column of data.
+
+If `X` is your numeric column name, `hist(data$X)` to plot a basic histogram. You can use `?hist` in the console to see all the optional argumnts. [One that I commonly use is the `breaks` argument, which lets you specify the location and sizes of bins. Another useful argument is `main` which refers to the plot title, and `freq` which changes from counts to proportions.]
+
+
+
+<span style="color:purple;">
+$\star$ **Task** Plot histograms to show the distribution on number of Sessions, number of Songs, latencies and number of errors. 
+</span>  
+```{r, eval= TRUE}
+library(dplyr)
+userAggregated = songAppData %>%  group_by(songAppData$UserId) %>%  summarise(nSessions=n(), averageSongPerSession = mean(songAppData$nSongs))
+hist(userAggregated$nSessions)
+hist(songAppData$nSongs)
+hist(songAppData$avgLatencies)
+hist(songAppData$nErrors)
+```  
+
+A note: when we look at a histogram, we can get a sense of the "shape" of the distribution. 
+Are values close together vs. spread apart? 
+Is the distribution symmetric vs. skewed? [Skewed distributions have a peak and then data spread out mainly in one direction. "Left skew" means the data is spread out mainly toward lower (left) values. "Right skew" means the data is spread out mainly toward higher (right) values. Symmetric distributions are balanced-- there's no main direction of skew.]
+
+## Boxplots: another view for distribution of data
+
+Boxplots (or *box and whisker* plots) are a second way of quickly looking at the distribution of numeric data. 
+* Boxplots split the data into quarters: the minimum value, the value with 25% of data less than it (aka the *25th percentile*), the value with 50% of data less than it (aka the *50th percentile*, the 75th percentile, and the max. These are then represented in a figure. 
+
+* In R, use the command `boxplot(data$X)` to plot a single boxplot for a column.
+  + Because boxplots are compact you can plot the boxplot for multiple variables simultaneously. For example, for the 2nd, 3rd, and 4th columns: `boxplot(data[, 2:4])`.
+  + You can also make a boxplot of one column, but split out by a different categorical variable. This makes side-by-side boxplots based on the categorical variable. For example, if `Y` is a numeric column and `X` is categorical, `boxplot(data$Y ~ data$X)` plots the boxplot distribution of `Y`, but split out between the different values for `X`. 
+* Outliers (values that are substantially outside the middle range of data) are not included in the boxplot and are instead shown as circles. Seeing outliers lets you know that most of the data is condensed in the range of the boxplot, but a small fraction of the data extends beyond that.
+* Compared to a histogram, boxplots have a little less info, but are more compact. 
+
+
+<span style="color:purple;">
+$\star$ **Task** Plot a side-by-side boxplot that shows the distribution of latency, split out by the device operating system.
+</span>  
+```{r}
+ boxplot(songAppData$avgLatencies ~ songAppData$DeviceOS)
+```
+
+
+
+## Scatterplots: review relationships between variables
+
+If`X` and `Y` are two numeric columns, `plot(data$X, data$Y)` will generate a simple scatterplot.
+
+<span style="color:purple;">
+$\star$ **Task** Create a scatterplot of the number of songs vs. the number of skipped songs. From this plot, describe the relationship (or non-relationship) between these two variables.
+</span> 
+```{r} 
+plot(songAppData$nSongs,songAppData$nSongsSkipped)
+```?
+
+
+<span style="color:blue;">
+the relations between these two variable:
+As the number of songs gets bigger, the number of songs skipped is also getting bigger
+</span>
+
+
+## Tables: review counts of data in different categories
+
+If `X` is your categorical column name, `table(data$X)` will produce a summarized table of counts in each value of X.
+
+
+<span style="color:purple;">
+$\star$ **Task** Create a table summarizing the number of users per device type. Then create a table summarizing the number of users that had no errors vs. one error. The error version will require you to use a call of the form `table(data$X > 0)`, where this makes a table for the boolean error presence.
+</span>  
+```{r}
+table(songAppData$DeviceOS)
+table(songAppData$DeviceOS > 0)
+
+```
+
+
+<span style="color:purple;">
+$\star$ **Task**Now wrap one of the table commands you did above in `prop.table()`: that is, run a command like `prop.table(table(data$X))`. You should see that instead of counts, the entries of the table have been converted to proportions.
+</span>  
+```{r}
+prop.table(table(songAppData$DeviceOS))
+```
+
+Rs table function also allows you to create so-called "contingency tables" which allow you to look at frequency of events in two conditions simultaneously. This produces information of the form:
+
+|               |Error: FALSE|Error: TRUE|
+| ------------- |:----------:| ---------:|
+| iOS           | #  or %    | #  or %   |
+| android       |#  or %     | #  or %   |
+| windows       | #  or %    | #  or %   |
+
+
+<span style="color:purple;">
+$\star$ **Task** Build a contingency table that will fill out the info #s in the one above. To do this, supply the two columns of interest as arguments (e.g. `table(data$X,data$Y > 0)`).
+</span>  
+```{r}
+table(songAppData$DeviceOS, songAppData$DeviceOS>0)
+```
+
+<span style="color:purple;">
+$\star$ **Task** Now build a contingency table that will fill out the cells from the above with proportions instead of counts. To do this, wrap the `table()` call you made above in the method `prop.table()`.
+</span>  
+```{r}
+prop.table(table(songAppData$DeviceOS, songAppData$DeviceOS>0))
+```
+
+
+## OPTIONAL: advanced plotting in R 
+
+To do prettier/more advanced plotting in R, you can make use of the `ggplot` library. 
+* Install by running this line once  `install.packages("ggplot2")`
+* Add the following line to your script (before your plot) `library(ggplot2)`
+* If you want to learn more [check out this ggplot tutorial](http://r-statistics.co/Complete-Ggplot2-Tutorial-Part1-With-R-Code.html)
+
+
+As an example, plot the following, but replace `data` with your main data variable, `X` with the name of the column for latency of song load and `Y` with the name of the column column for device type.
+
+```{r, eval=TRUE}
+library(ggplot2)
+ggplot(songAppData, aes(x=avgLatencies, fill=DeviceOS)) + geom_histogram(alpha = 0.4, aes(), binwidth = 1, position = "identity") + geom_vline(xintercept = median(songAppData$avgLatencies))
+```
+
+```{r, eval=TRUE}
+ggplot(songAppData, aes(x=avgLatencies, y=DeviceOS, fill = DeviceOS)) + 
+  geom_boxplot(alpha=0.5) + theme_light()
+
+```
+
+In general basic plotting functions in R are "good enough" for your own use to understand data, but plots from ggplot are highly configurable and are great options for work that you share, post, or publish.
+
+## OPTIONAL: Time series to review time-related trends of a numeric variable
+
+We won't go into time series much in this class -- but they are incredibly useful everywhere from tracking stock prices, monitoring usage of a product over time, tracking trends in prevelance of diseases, and more. Time series can demonstrate trends and patterns which you can use to identify anomolies (times when something changed), or predict future behavior.
+
+If `X` is a (sorted!) time column, and `Y` is a numeric column you want to track over time, just use `plot(data$X, data$Y, type='l')` will generate a time-series.
+
+
+<span style="color:purple;">
+$\star$ **Optional Task** Download, import (and `View`) the time-aggregated csv table. Create a time-series of the hour of the day vs. the number of sessions started in that hour. Are certain times of day busier than others? 
+</span> 
+```{r, eval=FALSE} 
+plot(sessionsStartedEachHour$X.1 ~ sessionsStartedEachHour$times)
+
+```
+
+
+******
+# Numeric summaries of data
+
+We'll cover some frequently used summary statistics for data here. You'll learn how to compute these using built-in R methods. You'll also be asked to reflect on what each summary statistic indicates.
+
+In this section you'll also make use of the `subset` method to consider just specific portions of the data.
+
+## Mean (average)
+
+The most common summary statistic, this estimates the center of the distribution. It is also an estimate of the *expected value* (we'll talk about that later).
+42.945 million
+* can be skewed by outliers (consider that the average compensation in a room of 400 Microsoft retail store employees is around \$48,000 but jumps to over \$150,000 if the Microsoft CEO walks into the room)
+* Simple computation: take the sum, divide by the count: $$\overline{X} = \sum_{i=1}^n \frac{1}{n}\cdot X_i$$
+* To compute in R, use `mean(V)` for a vector or column `V`. Checking `?mean` reveals two optional arguments:
+  + `trim` gives you the option of ignoring the highest/lowest x/% of values before taking the mean. This can help reduce the impact of outliers, but used too aggressively can also skew your results. We'll use it only sparingly.
+  + `na.rm` if there are null/`na` values, the mean will throw an error. This argument allows you to discard any rows of data that are `na` before taking the mean (also reduces the count *n*).
+  + note: instead of computing for each column separately, you can use the shortcut `colMeans(data)`.  
+
+
+<span style="color:purple;">
+$\star$ **Task** Compute all numeric column means for the data set. Go through and for each put it into a sentence: "The average __________ (insert column name) in this sample of data was ____________ (insert computed mean). If we want to improve our product we should aim to __________ (increase? or decrease?) that average."
+</span>  
+```{r}
+mean(songAppData$nSongs, trim=0, na.rm = FALSE)
+mean(songAppData$nErrors, trim=0, na.rm = FALSE)
+mean(songAppData$avgLatencies, trim=0, na.rm = FALSE)
+mean(songAppData$nSongsSkipped, trim=0, na.rm = FALSE)
+```
+
+<span style="color:blue;">
+1.The average number of songs in this sample data was 10.60728. If we want to improve our product we should aim to increase that average.
+
+</span>
+<span style="color:blue;">
+2.The average number of errors in this sample data was 1.040749. If we want to improve our product we should aim to decrease that average.
+
+</span>
+<span style="color:blue;">
+3.The average number of latency in this sample data was 364.5242. If we want to improve our product we should aim to decrease that average.
+
+</span>
+
+<span style="color:blue;">
+4.The average number of songs skipped in this sample data was 0.9634192. If we want to improve our product we should aim to decrease that average.
+</span>
+
+## Median
+
+The median (or 50th percentile) is found by ordering all of the data and taking the middle value. Note that this is a different measure of "center" than the mean: it can result in a number close to the mean, but can also be really far away.
+* Unlike the mean, the median isn't skewed by outliers. In the Microsoft example, the median income would be closer to \$48,000 -- the salary of the person with 200 people earning less and 200 people earning more.
+* In R, compute the median by taking `median(V)` for the data column or vector `V`.
+
+
+<span style="color:purple;">
+$\star$ **Task** Compute medians for 3 different numeric columns. Which are close to the mean? Which are far off -- and in what direction? This tells you about skew of the distribution -- that there are a relatively small number of values that have big enough values to pull the mean in a particular direction. This should line up with the skew you may have observed in plotting the histograms.
+</span> 
+```{r} 
+median(songAppData$nSongs)
+median(songAppData$nErrors)
+median(songAppData$avgLatencies)
+median(songAppData$nSongsSkipped)
+
+```
+<span style="color:blue;">
+the median of number of songs skipped is close to the mean most
+the median of number of songs is far away from its mean.
+
+</span>
+## Other percentiles
+
+You saw the 25th and 75th percentiles in box plots. In the tech industry, percentile measures are frequently monitored to keep an eye on (and hopefully improve) ``worst" performance, as this can typically be *much* worse than the average performance. For example, a team might set a goal to reduce the 95th percentile of latency by a quarter.
+
+* In R, compute percentiles using the `quantile` function. For example, `quantile(data$X, c(0.50,0.95))` would compute both the median and 95th percentile of data column `X`.
+* If you want to know the 95th percentile for all users, you need to take a large sample: estimates of percentiles off small data sets can be wildly inaccurate.
+
+
+<span style="color:blue;">
+$\star$ **Task** Compute the 80th and  95th percentile of latency. If your team is setting a goal to reduce the 95th percentile of latency by a quarter, what's the target latency?
+</span> 
+```{r}
+quantile(songAppData$avgLatencies, c(0.5,0.95))
+```
+
+
+<span style="color:blue;">
+If your team is setting a goal to reduce the 95th percentile of latency by a quarter, the target latency will be 640.8852(854.5136*0.75)
+</span>
+
+## Standard deviation: a measure of consistency vs. spread
+
+Data can have the same *center* but very different *spread*. It's important to understand and track both!
+```{r}
+```
+As an example, consider the amount of money in people's bank accounts, there's a very wide spread: some have \$0 balance, and others have tens of thousands of dollars. A reasonable guess could be that the average is around \$800 and the *standard deviation* (a standardized measure of how much values vary from the center) might be \$2000. 
+If the bank made an error that redistributed account balance so that everyone had the same amount, the average would still be \$800, but the standard deviation would now be \$0. 
+If the bank was tracking the average balance, but not the standard deviation (or other measures of consistency), they might totally miss this error!
+
+* standard deviation formula looks a little messy: $$\hat\sigma = \sqrt{\frac{\sum_{i=1}^n (X_i - \overline{X})^2}{n-1}}
+ + This is based on the distance formula (square root of sum of squared differences), but more formally comes from an attribute (variance) we'll learn later. For now, don't worry too much about the formula. Just know that **standard deviation gives a sense of an average distance between data points and the mean.**
+* In R, compute standard deviation of a sample vector `V` by `sd(V)`
+* Generally, standard deviation close to 0 means data is very consistent. Standard deviation bigger than the average indicates data is really inconsistent.
+
+<span style="color:purple;">
+$\star$ **Task** Compute the standard deviation for all numeric columns. In particular, compute the so-called ``coefficient of variation" by taking the standard deviation divided by the the mean. Which column has the highest standard deviation relative to the mean? Which is most consistent relative to the mean?
+</span>  
+
+```{r}
+sd(songAppData$nSongs)/mean(songAppData$nSongs)
+sd(songAppData$nErrors)/mean(songAppData$nErrors)
+sd(songAppData$avgLatencies)/mean(songAppData$avgLatencies)
+sd(songAppData$nSongsSkipped)/mean(songAppData$nSongsSkipped)
+```
+<span style="color:blue;">
+1.column nSongsSkipped has the highest standard deviation relative to the mean
+
+</span>
+<span style="color:blue;">
+2.column avgLatecies is most consistent relative to the mean
+
+</span>
+
+## Proportions: percent of data that meets a particular criteria
+
+You looked at counts and proportiosn meeting a specific criteria when you built tables. Since counts vary depending on how much data you collect, it's usually better to look at the *proportion* (aka percentage or fraction) of data.
+
+Although tables are useful, direct computations are more flexible. So let's practice how to do this.
+
+* sum up the number of times the condition is met, and divide by the total count.
+* In R we can do this for even multi-condition criteria `sum(data$X > 5  && data$Y == 0 )/nrow(data)` would first evaluate the condition (X value is more than 5 AND Y value is 0) as TRUE (1) or FALSE (0). The sum gives the number of trues (since true counts as 1 and false as 0), and then we divide by the total number of rows.
+  + `&&` for AND, `||` for OR, `!=` for NOT EQUAL in your conditions.
+  
+<span style="color:purple;">
+$\star$ **Task** You are seeing more errors than you'd like in the product, and think there's a bug. The bug could be in a change that was specific to iOS, or it could be in a change that impacted all device types. First find the proportion of all users that had at least one error.
+
+Then make a data subset to just the iOS sessions: find the proportion among this data.
+
+Based on this info, where do you think you should start looking for the bug?
+</span>  
+```{r}
+sum(songAppData$nErrors>1)/nrow(songAppData)
+iosSubset = subset(songAppData, songAppData$DeviceOS == "iOS")
+sum(iosSubset$nErrors>1)/nrow(iosSubset)
+head(iosSubset)
+```
+
+

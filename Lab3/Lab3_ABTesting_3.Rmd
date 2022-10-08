@@ -1,0 +1,509 @@
+---
+title: "Lab3: A/B testing"
+author: "<YOUR NAME HERE>"
+date: "6/11/2021"
+output:   
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Before proceeding: please replace the "author" above with your name!**
+
+# Goals of this lab
+
+* Perform a power computation to determine sample size needed so that you have particular false positive and false negative probabilities.
+* Gain confidence that you can apply statistical testing from the online homeworks to a large A/B test data set similar to one you might see for a tech industry product.
+* Practice summarizing appropriate conclusions from an A/B test and communicating them to someone who doesn't know what a p-value represents.
+
+*****
+
+# Useful reminders from lab 1
+
+In order to do this lab, you'll need some of the tools for accessing subsets and columns of a data frame which you learned in lab 1.
+
+As a very quick review, consider the following data set which are results from 1974 motor trend car road tests (I'm just using this because it's a built-in "toy" data set in R:
+
+```{r}
+head(mtcars)
+```
+
+If I wanted to, say, find the average mpg of all cars with 6 cylinders I could do the following:
+
+First subset to take just the rows of the data frame where cyl == 6:
+```{r}
+six_cylinders = subset(mtcars, cyl == 6)
+
+head(six_cylinders)
+```
+
+
+And then average the "mpg" column of this subset:
+```{r}
+mean( six_cylinders$mpg)
+```
+
+This process will come in handy when you want to subset down to just the treatment or control group and find the sample size, mean, and standard deviation of just that single group (needed for doing your statistical tests!).
+
+Another useful thing to recall: If I wanted to find the proportion of all cars in the data set that got less than 20mpg, I could do that as follows:
+
+First convert the mpg column into a boolean column:
+
+```{r}
+is_MpgUnder20 = (mtcars$mpg < 20)
+head(is_MpgUnder20)
+head(mtcars$mpg) # just for reference, to prove "TRUE" lines up with the values under 20mpg
+```
+
+And then take the average:
+```{r}
+proportion = mean(is_MpgUnder20)
+proportion
+```
+[Side note: if your sample is large enough (think >100) instead of doing $\sigma = \sqrt{p*(1-p)}$, I can actually just use `sd(is_MpgUnder20)`. In this case they get us close but not exactly the same, because the sample size is only 32.]
+
+```{r}
+#formula for sd of a binary column:
+sqrt(proportion*(1-proportion))
+
+#sd(boolean) to find the sd of the binary column:
+sd(is_MpgUnder20)
+
+# sample size is only 32, so these are close but not exact:
+length(is_MpgUnder20)
+```
+# Power analysis
+
+The song app team developed a "song recommendation" feature that uses a new Machine Learning algorithm to recommend next songs to users. The goal is to improve song recommendations: ideally improving user experience.
+
+Because the machine learning algorithm is more expensive to train and keep updated, the engineering team only wants to roll it out if it causes a measurable increase in the average amount of time users spend listening to music over two weeks. **They expect around a 3 minute increase.**
+
+To measure this, they decide to run an A/B-test: at first they intend to split the user population in half for two weeks -- the first half will get the new algorithm, the second half will get the old algorithm, and they'll compare outcomes.
+
+In this setting, they are doing a Hypothesis test where:
+
+$H_0:$ the new algorithm has no positive impact. $\Delta \le 0$  (the treatment - control averages are at most zero).
+
+$H_a:$ the new algorithm does has a positive impact: $\Delta > 0$.
+
+
+Using all the users in the A/B test would give you the *most power* to detect changes. But your manager is concerned: what if the new algorithm is *bad*? They ask that you use a smaller sample size to reduce potential for negative impact.
+
+## TASK: determine the smallest viable sample size to detect the expected 3 minute increase.
+
+You are tasked with finding a viable sample size so that **with probability 90%** your test will detect an increase with $p-value < 0.01$ threshold. In other words, you are looking for:
+
++ false negative rate under 10% (aka 90% power)
++ false positive rate under 1% (aka p-value threshold of 0.01)
+
+You do this by:
+1) Looking at the past week's user data and computing the total number of active users, mean time users spent in app, and standard deviation of time spent in app. These #s are below (mean and standard deviation are in minutes).
+
+Thats:
+```{r}
+total_n = 900000
+mean = 55.4
+sd = 196.8
+
+```
+2) You know that you'll test the measured difference $\Delta$ against the hypothesis that the difference is at most 0. You also know that, since you are dealing with a difference of means between two groups, you'll use $SE = \sqrt{\sigma_A^2/n_a + \sigma_B^2/n_B}$.
+You also know you are looking to detect a difference of around 3 minutes.
+```{r}
+expected_delta=3
+```
+
+3) Playing with the traffic % (the fraction of users included in the study) in the code below until the power of detection is just barely above 90%. In other words, the false negative rate is between 9 and 10%.
+
+**To do: The code starts off with a setting where 80% (0.8) of users are included in the study (40% to treatment, 40% to control). Change this until the plot reflects your goal. Report the traffic percentage you discover in the blank below.**
+
+
+
+Traffic Percentage: ________
+
+
+
+
+TIP: Report a traffic percentage that gives you a false negative rate of between 9 and 10%.
+
+
+```{r}
+#Note: this code plots the H0 distribution and the Ha distribution, as well as the threshold for rejecting H0. In the legend, the areas of the false positive and false negative regions (aka the likelihood you get a sample for those if H0/Ha is true respectively) are shown
+library(ggplot2)
+
+traffic_pctage = 0.255# adjust this!
+
+n_eachgroup = (traffic_pctage*total_n)/2.0 #approximately half the traffic goes to each group
+se = sqrt(sd^2/n_eachgroup+sd^2/n_eachgroup) # the standard error for sample means can be estimated from last week's standard deviation and each group's sample size
+
+
+possible_sample_delta <- seq(-5,10,0.01)
+
+
+#H0 distribution:
+densities_delta0 <- dnorm(possible_sample_delta, 0, se) # this gives the relative likelihood of finding various differences between the sample groups if there is no difference in average length of time spent in the app between the groups.
+
+threshold_for_decision = qnorm(0.99,0, se) # this is the value so that the false positive rate is 1%, since it gives the 99th percentile of deltas, assuming the population difference is at most 0.
+
+
+false_positive_pct = 100*pnorm(threshold_for_decision, 0, se, lower.tail = F)
+
+#Ha distribution:
+
+densities_delta3 <- dnorm(possible_sample_delta, expected_delta, se) # this gives the relative likelihood of finding various differences between sample groups, if the difference in averages is actually 3minutes as expected.
+
+false_negative_pct = 100*pnorm(threshold_for_decision, expected_delta, se)
+y1 <- seq(-5,threshold_for_decision, 0.01)
+y2<- seq(threshold_for_decision ,10,0.01)
+densities_delta0_exceedThreshold = dnorm(y2,0,se)
+
+FN = c(rep(sprintf("False Negative rate assuming Ha: %.1f %%", false_negative_pct), length(y1)),rep(0,length(y2)))
+
+densities_FN = c(dnorm(y1,expected_delta,se), rep(0,length(y2)))
+
+data2<-data.frame(x=possible_sample_delta,y0=densities_delta0, ya = densities_delta3, yShaded= c(rep(0, length(y1)), densities_delta0_exceedThreshold), FP = c(rep(0,length(y1)),rep(sprintf("False positive rate assuming H0: %.1f %%",false_positive_pct), length(y2))), densities_FN = densities_FN, shaded_FN = FN)
+
+
+threshold = sprintf("threshold for rejecting H0: %.1f minutes", threshold_for_decision)
+# now for the plot:
+ggplot(data2, aes(x=x, y = ya))+
+  geom_line()+
+  ylab('Frequency of sample difference, as predicted by CLT')+
+  xlab('Measured sample difference')+
+  geom_line(mapping=aes(x=x,y=y0),colour='blue')+
+  geom_vline(aes(xintercept = threshold_for_decision, color=threshold), linetype = "dashed", size=1, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x<threshold_for_decision, x, NaN), fill=FN), alpha=0.5, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x>threshold_for_decision, x, NaN), y=densities_delta0, fill=FP), alpha=0.5)
+  
+```
+
+## BONUS 
+
++5pts if both the following questions are answered completed correctly -- both can be found if you alter the code above appropriately. Please show work (by copying the code above and modifying it to answer the question):
+
+1. What is the false negative rate if Ha is true and you use a p-value threshold of 0.05 and traffic percentage of 40%? (you can adapt the code to answer this question)
+
+```{r}
+#Note: this code plots the H0 distribution and the Ha distribution, as well as the threshold for rejecting H0. In the legend, the areas of the false positive and false negative regions (aka the likelihood you get a sample for those if H0/Ha is true respectively) are shown
+library(ggplot2)
+
+traffic_pctage = 0.4# adjust this!
+
+n_eachgroup = (traffic_pctage*total_n)/2.0 #approximately half the traffic goes to each group
+se = sqrt(sd^2/n_eachgroup+sd^2/n_eachgroup) # the standard error for sample means can be estimated from last week's standard deviation and each group's sample size
+
+
+possible_sample_delta <- seq(-5,10,0.01)
+
+
+#H0 distribution:
+densities_delta0 <- dnorm(possible_sample_delta, 0, se) # this gives the relative likelihood of finding various differences between the sample groups if there is no difference in average lengh of time spent in the app between the groups.
+
+threshold_for_decision = qnorm(0.95,0, se) # this is the value so that the false positive rate is 5%, since it gives the 95th percentile of deltas, assuming the population difference is at most 0.
+
+
+false_positive_pct = 100*pnorm(threshold_for_decision, 0, se, lower.tail = F)
+
+#Ha distribution:
+
+densities_delta3 <- dnorm(possible_sample_delta, expected_delta, se) # this gives the relative likelihood of finding various differences between sample groups, if the difference in averages is actually 3minutes as expected.
+
+false_negative_pct = 100*pnorm(threshold_for_decision, expected_delta, se)
+y1 <- seq(-5,threshold_for_decision, 0.01)
+y2<- seq(threshold_for_decision ,10,0.01)
+densities_delta0_exceedThreshold = dnorm(y2,0,se)
+
+FN = c(rep(sprintf("False Negative rate assuming Ha: %.1f %%", false_negative_pct), length(y1)),rep(0,length(y2)))
+
+densities_FN = c(dnorm(y1,expected_delta,se), rep(0,length(y2)))
+
+data2<-data.frame(x=possible_sample_delta,y0=densities_delta0, ya = densities_delta3, yShaded= c(rep(0, length(y1)), densities_delta0_exceedThreshold), FP = c(rep(0,length(y1)),rep(sprintf("False positive rate assuming H0: %.1f %%",false_positive_pct), length(y2))), densities_FN = densities_FN, shaded_FN = FN)
+
+
+threshold = sprintf("threshold for rejecting H0: %.1f minutes", threshold_for_decision)
+# now for the plot:
+ggplot(data2, aes(x=x, y = ya))+
+  geom_line()+
+  ylab('Frequency of sample difference, as predicted by CLT')+
+  xlab('Measured sample difference')+
+  geom_line(mapping=aes(x=x,y=y0),colour='blue')+
+  geom_vline(aes(xintercept = threshold_for_decision, color=threshold), linetype = "dashed", size=1, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x<threshold_for_decision, x, NaN), fill=FN), alpha=0.5, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x>threshold_for_decision, x, NaN), y=densities_delta0, fill=FP), alpha=0.5)
+#The false negative rate is:0.1704011
+false_negative_pct
+  
+```
+
+
+
+2. What is the threshold for rejecting H0 if you use 50% of the traffic and want the false positive rate of 5%? Also, what is the false negative rate at this level?
+
+```{r}
+#Note: this code plots the H0 distribution and the Ha distribution, as well as the threshold for rejecting H0. In the legend, the areas of the false positive and false negative regions (aka the likelihood you get a sample for those if H0/Ha is true respectively) are shown
+library(ggplot2)
+
+traffic_pctage = 0.5# adjust this!
+
+n_eachgroup = (traffic_pctage*total_n)/2.0 #approximately half the traffic goes to each group
+se = sqrt(sd^2/n_eachgroup+sd^2/n_eachgroup) # the standard error for sample means can be estimated from last week's standard deviation and each group's sample size
+
+
+possible_sample_delta <- seq(-5,10,0.01)
+
+
+#H0 distribution:
+densities_delta0 <- dnorm(possible_sample_delta, 0, se) # this gives the relative likelihood of finding various differences between the sample groups if there is no difference in average lengh of time spent in the app between the groups.
+
+threshold_for_decision = qnorm(0.95,0, se) # this is the value so that the false positive rate is 5%, since it gives the 95th percentile of deltas, assuming the population difference is at most 0.
+
+
+false_positive_pct = 100*pnorm(threshold_for_decision, 0, se, lower.tail = F)
+
+#Ha distribution:
+
+densities_delta3 <- dnorm(possible_sample_delta, expected_delta, se) # this gives the relative likelihood of finding various differences between sample groups, if the difference in averages is actually 3minutes as expected.
+
+false_negative_pct = 100*pnorm(threshold_for_decision, expected_delta, se)
+y1 <- seq(-5,threshold_for_decision, 0.01)
+y2<- seq(threshold_for_decision ,10,0.01)
+densities_delta0_exceedThreshold = dnorm(y2,0,se)
+
+FN = c(rep(sprintf("False Negative rate assuming Ha: %.1f %%", false_negative_pct), length(y1)),rep(0,length(y2)))
+
+densities_FN = c(dnorm(y1,expected_delta,se), rep(0,length(y2)))
+
+data2<-data.frame(x=possible_sample_delta,y0=densities_delta0, ya = densities_delta3, yShaded= c(rep(0, length(y1)), densities_delta0_exceedThreshold), FP = c(rep(0,length(y1)),rep(sprintf("False positive rate assuming H0: %.1f %%",false_positive_pct), length(y2))), densities_FN = densities_FN, shaded_FN = FN)
+
+
+threshold = sprintf("threshold for rejecting H0: %.1f minutes", threshold_for_decision)
+# now for the plot:
+ggplot(data2, aes(x=x, y = ya))+
+  geom_line()+
+  ylab('Frequency of sample difference, as predicted by CLT')+
+  xlab('Measured sample difference')+
+  geom_line(mapping=aes(x=x,y=y0),colour='blue')+
+  geom_vline(aes(xintercept = threshold_for_decision, color=threshold), linetype = "dashed", size=1, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x<threshold_for_decision, x, NaN), fill=FN), alpha=0.5, show.legend=T)+
+  geom_area(mapping=aes(x= ifelse(x>threshold_for_decision, x, NaN), y=densities_delta0, fill=FP), alpha=0.5)
+
+#The threshold for rejecting h0 is 0.9651084
+threshold_for_decision
+
+#The false negative is 0.02620696
+false_negative_pct
+  
+```
+
+
+
+# TASK: Run the A/B test comparing average listening time among treatment and control users
+
+After some consultation, you decide you want higher power in the test and end up running the test on 60% of traffic (~30% of users in each group).
+
+
+**1. Import the data set for this experiment, and View it to understand its structure.**
+
+```{r, eval=TRUE}
+# replace with the read in for your data, also set eval=TRUE
+songAppAB <- read.csv("C:/Users/seven/Desktop/Bellevue College/Math270/Lab3/songAppABData.csv")
+View(songAppAB)
+```
+
+**2. Compute the number of users in the treatment group ($n_T$), average time listened in the treatment group ($\overline X_T$) and the standard deviation of the treatment group ($\hat\sigma_T$).**
+
+```{r}
+TreatmentGroup = subset(songAppAB, songAppAB$labels == "treatment")
+View(TreatmentGroup)
+#the number of users in the treatment group
+n_T = nrow(TreatmentGroup)
+n_T
+#the average time listened in the treatment group
+X_T = mean(TreatmentGroup$times)
+X_T
+#the standard deviation of the treatment group
+sigma_T =  sd(TreatmentGroup$times)
+sigma_T
+
+
+```
+
+**3. Compute the number of users in the control group ($n_C$), average time listened in the control group ($\overline X_C$) and the standard deviation of the control group ($\hat\sigma_C$).**
+
+```{r}
+ControlGroup = subset(songAppAB, songAppAB$labels == "control")
+View(ControlGroup)
+#the number of users in the control group
+n_C = nrow(ControlGroup)
+n_C
+#the average time listened in the control group
+X_C = mean(ControlGroup$times)
+X_C
+#the standard deviation of the control group
+sigma_C =  sd(ControlGroup$times)
+sigma_C
+
+
+```
+
+**4. What is the sample difference $\Delta$?**
+```{r}
+#the sample difference
+d = X_T - X_C
+d
+
+```
+
+
+
+**5. What is the standard error for samples of this size, based on your sample standard deviations and sample sizes?**
+```{r}
+se = sqrt(sigma_T^2/n_T + sigma_C^2/n_C)
+se
+
+```
+
+
+**6. Compute the p-value for a sample with a difference as large as $\Delta$ compared to the $H_0$ claim that there is no difference.**
+```{r}
+p_value = pnorm(d, 0, se, lower.tail = F)
+p_value
+
+```
+
+**7. Make a conclusion, using $p-value<0.01$ as your threshold: is the difference in the sample strong enough evidence to indicate that the new algorithm led to longer listening times?**
+```{r}
+#The conclusion is true
+conclusion = p_value < 0.01
+conclusion
+```
+
+
+**8. Your manager asks you to estimate *how much* the new algorithm changed listening length. You know the sample difference is inaccurate (because of sampling error) so want to give him a range of reasonable values. Compute a 95% confidence interval for the *true* difference made by the new algorithm.**
+```{r}
+z = qnorm(0.975)
+z
+#The interval is [3.3193, 5.6693]
+lowerBound = d - z*se
+upperBound = d + z*se
+lowerBound
+upperBound
+
+
+```
+
+
+
+**9. Summarize your findings in a few sentences in a way that both 1) includes all relevant numbers you computed above but also 2) explains the result/meaning to non-statsy folks. Conclude with a clear statement: should you ship the new algorithm?**
+
+
+Note: one option for answering this question is to follow the (very dry) pattern below. But you are encouraged to adapt this in your own words.
+
+example form: "In the data we collected from this A/B test we measured that the treatment users had an average listening time of ________ while the control users had an average listening time of ________. While this shows a difference of _______ minutes in the sample, we ran a statistical test to ensure that the difference was large enough that we can trust the result would hold for users outside of the sample too. When we accounted for standard error we found a (very small/relatively small/large) p-value. This indicates our data would be (extremely unlikely/unlikely/common) if the treatment has no effect. We (do/don't) recommend shipping the new algorithm based on sufficient evidence that the treatment has a (positive/negative/neutral) effect on average listening time."
+
+<span style="color:blue;">
+In the data we collected from this A/B test we measured that the treatment users had an average listening time of 61.4118 minutes while the control users had an average listening time of 56.91749 minutes. While this shows a difference of 4.494308 minutes in the sample, we ran a statistical test to ensure that the difference was large enough that we can trust the result would hold for users outside of the sample too. When we accounted for standard error we found a very small p-value. This indicates our data would be extremely unlikely if the treatment has no effect. We do recommend shipping the new algorithm based on sufficient evidence that the treatment has a positive effect on average listening time.
+
+</span>
+
+
+# TASK: choose more metrics and test those too.
+
+There are some other columns in the data set, that refer to other (potentially) relevant measurements. You decide to check whether there was a stat sig detectable change (in either direction! so use two-sided tests to include probability of the sample being as extreme above OR below). You should use these tests to get a broader picture of the impact of the new algorithm.
+
+**For each paring below, choose one metric, and answer the questions.**
+
+
+## Averages (pick one of these)
++ Average number of skipped songs per user
++ Average number of errors per user
++ Average number of sessions per user
+
+
+**Answer the following two questions.**
+
+1. Which metric did you choose? Justify (as if to your manager) why you want to test this metric: what outcome of this test would possibly change your decision on whether to ship the new algorithm? What result would reinforce the decision?
+
+<span style="color:blue;">
+I chose the test the errors per user because if the new algorithm is more likely to make more errors per user, I may change my mind to not ship the new algorithm
+
+</span>
+
+
+2. Run a complete statistical test for this metric. Show your R code. Then in a few sentences, report your conclusion (including a p-value) similar to part 9 of your test for average listening length.
+```{r}
+#The average error in treatment group
+error_T = mean(TreatmentGroup$errors)
+error_T
+#The standard deviation of treatment group
+sd_T = sd(TreatmentGroup$errors)
+sd_T
+#The average error in control group
+error_C = mean(ControlGroup$errors)
+error_C
+#The standard deviation in control group
+sd_C = sd(ControlGroup$errors)
+sd_C
+#The sample difference
+error_d = error_T - error_C
+error_d
+#the standard error for the samples
+error_se = sqrt(sd_T^2/n_T + sd_C^2/n_C)
+error_se
+#the p_value for a sample with a difference as large as 0.002157527
+errorp_value = pnorm(error_d, 0, error_se, lower.tail = F)
+errorp_value
+#conclusion2
+conclusion2 = errorp_value < 0.01
+conclusion2
+```
+
+<span style="color:blue;">
+In the data we collected from this A/B test we measured that the treatment users had an average error of 1.001385 while the control users had an average error of 0.9992278. While this shows a difference of 0.002157527 in the sample, we ran a statistical test to ensure that the difference was large enough that we can trust the result would hold for users outside of the sample too. When we accounted for standard error we found a large p-value. This indicates our data would be common if the treatment has no effect. We do not recommend shipping the new algorithm based on sufficient evidence that the treatment has a negative effect on average error.
+
+</span>
+
+
+## Proportions (pick one of these)
++ Fraction of users who spent less than 5 minutes listening
++ Fraction of users who had only one session in the app
+
+
+**Answer the following two questions.**
+
+1. Which metric did you choose? Justify (as if to your manager) why you want to test this metric: what outcome of this test would possibly change your decision on whether to ship the new algorithm? What result would reinforce the decision?
+
+<span style="color:blue;">
+I chose the test the fraction of users who spent less than 5 minutes listening because if the new algorithm is more unlikely to attract users to listen for a longer time, I may change my mind to not ship the new algorithm
+</span>
+
+
+2. Run a complete statistical test for this metric. Show your R code. Then in a few sentences, report your conclusion (including a p-value) similar to part 9 of your test for average listening length.
+
+```{r}
+#the fraction of users who spent less than 5 minutes listening in treatment group
+p_T = sum(TreatmentGroup$times < 5) / n_T
+p_T
+#the fraction of users who spent less than 5 minutes listening in control group
+p_C = sum(ControlGroup$times < 5) / n_C
+p_C
+#the difference between their fractions
+p_d = p_T - p_C
+p_d
+#The standard error of the sampling distribution
+p_se = sqrt(p_T*(1-p_T)/n_T + p_C*(1-p_C)/n_C)
+p_se
+#The p_value for the sample
+p_value2 = pnorm((-1)*p_d, 0, p_se, lower.tail = F)
+p_value2
+#conclusion
+conclusion3 = p_value2 < 0.01
+conclusion3
+
+```
+<span style="color:blue;">
+In the data we collected from this A/B test we measured that the fraction of users who spent less than 5 minutes in treatment users was 0.2217427 while the fraction of users who spent less than 5 minutes in control users was 0.2256377. While this shows a difference of 0.003894955 in the sample, we ran a statistical test to ensure that the difference was large enough that we can trust the result would hold for users outside of the sample too. When we accounted for standard error we found a relative small p-value. This indicates our data would be unlikely if the treatment has no effect. We do recommend shipping the new algorithm based on sufficient evidence that the treatment has a positive effect on the fraction of users who spent less than 5 minutes.
+
+</span>
